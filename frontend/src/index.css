@@ -1,0 +1,16 @@
+/* Import global styles */
+
+@import './styles/global.css';
+
+
+
+/* All page-specific styles are imported in their respective component files:
+
+ * - Landing page: src/styles/landing.css
+
+ * - Login page: src/styles/login.css
+
+ * - Dashboard/Accounts/Tasks pages: src/styles/dashboard.css
+
+ */
+
