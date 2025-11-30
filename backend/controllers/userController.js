@@ -82,28 +82,58 @@ class UserController {
     });
   }
 
-  // Get user stats
+  // Get dashboard stats and recent activity for a user
   getUserStats(req, res) {
     const userId = parseInt(req.params.userId);
     const user = dataStore.getUser(userId);
-    
     if (!user) {
       return res.status(404).json({ error: 'User not found' });
     }
-    
+
     const bots = dataStore.getBotsByUser(userId);
-    const connectedBots = bots.filter(bot => bot.connected).length;
-    
+    // Determine connected via live state to avoid stale DB status
+    let connectedBots = 0;
+    try {
+      const botManager = require('../bot');
+      connectedBots = bots.reduce((acc, b) => acc + (botManager.getBotState(b.id)?.connected ? 1 : 0), 0);
+    } catch (_) {
+      connectedBots = bots.filter(b => b.status === 'online').length;
+    }
+
+    const metrics = dataStore.getMetrics(userId);
+    const totalActions = metrics.total_actions || 0;
+    const successActions = metrics.success_actions || 0;
+    const successRate = totalActions > 0 ? Math.round((successActions / totalActions) * 1000) / 10 : 0;
+
+    // Recent activity
+    const recent = dataStore.listRecentActivities(userId, 20).map(a => ({
+      id: a.id,
+      type: a.type,
+      message: a.message,
+      time: a.created_at,
+      botId: a.bot_id,
+      success: !!a.success
+    }));
+
+    // Tasks running (derive: count bots with a running task from live state if available)
+    let tasksRunning = 0;
+    try {
+      const botManager = require('../bot');
+      tasksRunning = bots.reduce((acc, b) => {
+        const state = botManager.getBotState(b.id);
+        return acc + (state && state.currentTask ? 1 : 0);
+      }, 0);
+    } catch (_) { tasksRunning = 0; }
+
     res.json({
       userId,
-      totalBots: bots.length,
-      connectedBots,
-      disconnectedBots: bots.length - connectedBots,
-      user: {
-        username: user.username,
-        email: user.email,
-        displayName: user.displayName
-      }
+      totals: {
+        activeBots: connectedBots,
+        tasksRunning,
+        totalActions,
+        successRate
+      },
+      recentActivity: recent
     });
   }
 }

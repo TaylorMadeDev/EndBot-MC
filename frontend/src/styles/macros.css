@@ -82,16 +82,45 @@
   gap: 0.75rem;
 }
 
+/* Custom scrollbar for palette blocks (inside .block-palette which has overflow-y) */
+.block-palette::-webkit-scrollbar {
+  width: 10px;
+}
+
+.block-palette::-webkit-scrollbar-track {
+  background: rgba(18, 10, 40, 0.6);
+  border-radius: 5px;
+  margin: 4px 0;
+}
+
+.block-palette::-webkit-scrollbar-thumb {
+  background: linear-gradient(135deg, var(--nebula-purple), var(--nebula-pink));
+  border-radius: 5px;
+  border: 2px solid rgba(18, 10, 40, 0.6);
+  transition: all 0.3s ease;
+}
+
+.block-palette::-webkit-scrollbar-thumb:hover {
+  background: linear-gradient(135deg, var(--nebula-pink), var(--nebula-purple));
+  border-color: rgba(139, 92, 246, 0.3);
+  box-shadow: 0 0 8px rgba(139, 92, 246, 0.5);
+}
+
+/* Palette block base (workflow style adoption) */
 .palette-block {
   padding: 0.875rem 1rem;
   border-radius: 12px;
   cursor: grab;
-  transition: all 0.3s ease;
+  transition: all 0.25s ease;
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  flex-wrap: nowrap;
+  white-space: nowrap;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.35);
+  background: linear-gradient(135deg, rgba(18, 10, 40, 0.9) 0%, rgba(18, 10, 40, 0.7) 100%);
+  border: 2px solid rgba(255,255,255,0.08);
+  position: relative;
 }
 
 .palette-block:hover {
@@ -105,14 +134,14 @@
 }
 
 .block-text {
-  font-weight: 600;
-  color: white;
-  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--star-white, #fff);
+  font-size: 0.95rem;
 }
 
 .block-suffix {
-  font-weight: 500;
-  color: rgba(255, 255, 255, 0.9);
+  font-weight: 600;
+  color: var(--muted, rgba(255, 255, 255, 0.7));
   font-size: 0.85rem;
 }
 
@@ -151,56 +180,150 @@
 }
 
 /* Canvas Blocks */
+/* Canvas block base (workflow style adoption) */
 .canvas-block {
   position: absolute;
   padding: 1rem 1.25rem;
   border-radius: 12px;
   cursor: grab;
-  transition: box-shadow 0.2s ease;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  transition: box-shadow 0.2s ease, transform 0.2s ease;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  background: linear-gradient(135deg, rgba(18, 10, 40, 0.9) 0%, rgba(18, 10, 40, 0.7) 100%);
+  border: 2px solid rgba(255,255,255,0.08);
   z-index: 1;
+  backdrop-filter: blur(6px);
 }
 
+/* Scratch-like Shapes */
+.canvas-block.shape-stack { border-radius: 10px; }
+.canvas-block.shape-stack::before {
+  content: '';
+  position: absolute;
+  top: -10px; left: 32px;
+  width: 38px; height: 10px;
+  background: transparent;
+  border-bottom-left-radius: 6px;
+  border-bottom-right-radius: 6px;
+  box-shadow: 0 10px 0 0 rgba(0,0,0,0.18);
+  opacity: .15;
+}
+.canvas-block.shape-stack::after {
+  content: '';
+  position: absolute;
+  bottom: -10px; left: 32px;
+  width: 38px; height: 10px;
+  background: rgba(255,255,255,0.08);
+  border-top-left-radius: 6px;
+  border-top-right-radius: 6px;
+  box-shadow: 0 -10px 0 0 rgba(255,255,255,0.08), inset 0 -2px 4px rgba(0,0,0,0.25);
+}
+
+.canvas-block.shape-hat { border-radius: 24px 24px 14px 14px; padding-top: 1.25rem; }
+.canvas-block.shape-hat::before { display:none; }
+.canvas-block.shape-hat::after { display:none; }
+
+.canvas-block.shape-cap { border-radius: 14px; }
+.canvas-block.shape-cap::before { display:none; }
+.canvas-block.shape-cap::after { display:none; }
+
+.canvas-block.shape-reporter, .palette-block.shape-reporter {
+  border-radius: 999px;
+  padding: .6rem 1rem;
+  font-weight: 600;
+}
+
+.canvas-block.shape-boolean, .palette-block.shape-boolean {
+  border-radius: 20px;
+  padding: .6rem 1rem;
+  font-weight: 600;
+  position: relative;
+}
+.canvas-block.shape-boolean::after, .palette-block.shape-boolean::after {
+  content:'';
+  position:absolute;
+  right:6px; top:50%; transform:translateY(-50%) rotate(45deg);
+  width:10px; height:10px;
+  background: rgba(255,255,255,0.15);
+  border-radius:2px;
+}
+
+/* Palette shape tweaks */
+.palette-block.shape-stack { position:relative; }
+.palette-block.shape-stack::after {
+  content:'';
+  position:absolute; bottom:-6px; left:28px; width:34px; height:6px;
+  background: rgba(255,255,255,0.1);
+  border-top-left-radius:4px; border-top-right-radius:4px;
+}
+.palette-block.shape-hat { border-radius: 20px 20px 12px 12px; }
+.palette-block.shape-cap { border-radius:12px; }
+
 .canvas-block:hover {
-  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.55);
 }
 
 .canvas-block.dragging {
   cursor: grabbing;
   z-index: 1000;
-  box-shadow: 0 8px 30px rgba(139, 92, 246, 0.5);
-  transform: scale(1.05);
+  box-shadow: 0 10px 36px rgba(139, 92, 246, 0.5);
+  transform: scale(1.04);
 }
 
+/* Start block specialized */
 .canvas-block.start-block {
   background: linear-gradient(135deg, #22c55e, #16a34a) !important;
   font-size: 1.1rem;
   font-weight: 700;
   padding: 1.25rem 1.5rem;
+  border-color: #22c55e;
+  box-shadow: 0 8px 28px rgba(34, 197, 94, 0.4);
 }
+
+/* Category border / accent colors (remove inline hardcoded colors) */
+.canvas-block.block-motion, .palette-block.block-motion { border-color: var(--nebula-cyan); }
+.canvas-block.block-control, .palette-block.block-control { border-color: var(--nebula-purple); }
+.canvas-block.block-variables, .palette-block.block-variables { border-color: var(--nebula-pink); }
+.canvas-block.block-minecraft, .palette-block.block-minecraft { border-color: #06b6d4; }
+.canvas-block.block-mineflayer, .palette-block.block-mineflayer { border-color: #0ea5e9; }
+
+/* Slight glow effect per category (performance-friendly shadow variations) */
+.canvas-block.block-motion:hover { box-shadow: 0 10px 30px rgba(6,182,212,0.45); }
+.canvas-block.block-control:hover { box-shadow: 0 10px 30px rgba(139,92,246,0.45); }
+.canvas-block.block-variables:hover { box-shadow: 0 10px 30px rgba(236,72,153,0.45); }
+.canvas-block.block-minecraft:hover { box-shadow: 0 10px 30px rgba(6,182,212,0.45); }
+.canvas-block.block-mineflayer:hover { box-shadow: 0 10px 30px rgba(14,165,233,0.45); }
+
+/* Palette hover accent */
+.palette-block.block-motion:hover { border-color: var(--nebula-cyan); }
+.palette-block.block-control:hover { border-color: var(--nebula-purple); }
+.palette-block.block-variables:hover { border-color: var(--nebula-pink); }
+.palette-block.block-minecraft:hover { border-color: #06b6d4; }
+.palette-block.block-mineflayer:hover { border-color: #0ea5e9; }
 
 .block-content {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
+  white-space: nowrap;
 }
 
 .block-input,
 .block-select {
-  padding: 0.375rem 0.625rem;
-  background: rgba(0, 0, 0, 0.3);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 6px;
-  color: white;
+  padding: 0.4rem 0.6rem;
+  background: var(--input-bg, rgba(0, 0, 0, 0.3));
+  border: 1px solid var(--border-color, rgba(255, 255, 255, 0.18));
+  border-radius: 8px;
+  color: var(--star-white, #fff);
   font-size: 0.85rem;
-  min-width: 50px;
+  min-width: 48px;
 }
 
 .block-input:focus,
 .block-select:focus {
   outline: none;
-  border-color: rgba(255, 255, 255, 0.5);
+  border-color: var(--nebula-purple, #8b5cf6);
+  box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.12);
   background: rgba(0, 0, 0, 0.4);
 }
 
@@ -505,3 +628,20 @@
   transform: translateY(-2px);
   box-shadow: 0 10px 30px rgba(99, 102, 241, 0.4);
 }
+
+/* === Overrides & Additions (Appended) === */
+/* Remove bottom notch for stack blocks */
+.canvas-block.shape-stack::after { display: none !important; }
+
+/* Small numeric inputs */
+.block-input.small-num { width:64px; min-width:64px; text-align:center; padding:0.4rem 0.5rem; }
+.block-input-preview.small-num { width:64px; min-width:64px; text-align:center; }
+
+/* Connection dotted lines */
+.connection-lines { position:absolute; inset:0; pointer-events:none; z-index:5; }
+.connection-line { stroke: var(--nebula-cyan); stroke-width:2; stroke-dasharray:5 5; opacity:.45; }
+.connection-line.category-control { stroke: var(--nebula-purple); }
+.connection-line.category-variables { stroke: var(--nebula-pink); }
+.connection-line.category-minecraft { stroke: #06b6d4; }
+.connection-line.category-mineflayer { stroke: #0ea5e9; }
+.connection-line.category-motion { stroke: var(--nebula-cyan); }

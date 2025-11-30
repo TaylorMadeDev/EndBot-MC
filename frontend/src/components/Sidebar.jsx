@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { NavLink } from 'react-router-dom';
+import { useBots } from '../context/BotsContext';
 
 const LinkItem = ({ to, icon, children, badge }) => (
   <NavLink
@@ -18,6 +19,7 @@ const LinkItem = ({ to, icon, children, badge }) => (
 
 export default function Sidebar({ mobileOpen = false, onClose }) {
   const [collapsed, setCollapsed] = useState(false);
+  const { bots } = useBots();
 
   return (
     <aside className={`sidebar ${collapsed ? 'collapsed' : ''} ${mobileOpen ? 'mobile-open' : ''}`}>
@@ -60,7 +62,11 @@ export default function Sidebar({ mobileOpen = false, onClose }) {
           <LinkItem to="/app/dashboard" icon="fa-th-large">
             Dashboard
           </LinkItem>
-          <LinkItem to="/app/bots" icon="fa-robot" badge="5">
+          <LinkItem
+            to="/app/bots"
+            icon="fa-robot"
+            badge={bots && bots.length > 0 ? String(bots.length) : undefined}
+          >
             My Bots
           </LinkItem>
           <LinkItem to="/app/accounts" icon="fa-user-circle">

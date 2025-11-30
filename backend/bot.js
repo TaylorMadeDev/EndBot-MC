@@ -1,5 +1,6 @@
 // Multi-bot manager for Mineflayer bots
 const mineflayer = require('mineflayer');
+const { pathfinder, Movements, goals } = require('mineflayer-pathfinder');
 const EventEmitter = require('events');
 
 class BotManager {
@@ -13,13 +14,28 @@ class BotManager {
   createBot(config) {
     const botId = `bot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     
-    const bot = mineflayer.createBot({
+    const botConfig = {
       host: config.host || 'ryasandigzz.aternos.me',
       port: config.port || 25565,
       username: config.username || `Bot_${botId.substr(-4)}`,
       version: config.version || '1.21.8',
       auth: config.auth || 'offline'
-    });
+    };
+
+    // Add Microsoft-specific auth options if provided
+    if (config.auth === 'microsoft' && config.authTitle && config.profilesFolder) {
+      botConfig.authTitle = config.authTitle;
+      botConfig.profilesFolder = config.profilesFolder;
+      botConfig.flow = config.flow || 'msal'; // Required by prismarine-auth >=3.x
+      // userIdentifier must match the name used during account linking
+      if (config.userIdentifier) {
+        botConfig.userIdentifier = config.userIdentifier;
+      }
+      console.log(`[BotManager] Creating bot with Microsoft auth, cache dir: ${config.profilesFolder}, flow: ${botConfig.flow}, userIdentifier: ${config.userIdentifier || 'not set'}`);
+    }
+
+    const bot = mineflayer.createBot(botConfig);
+    bot.loadPlugin(pathfinder);
 
     // Initialize bot state
     const botState = {
@@ -61,13 +77,71 @@ class BotManager {
       this.bots.delete(botId);
     }
 
-    const bot = mineflayer.createBot({
+    const botConfig = {
       host: config.host || 'localhost',
       port: config.port || 25565,
       username: config.username || `Bot_${botId.substr(-4)}`,
       version: config.version || '1.21.8',
       auth: config.auth || 'offline'
-    });
+    };
+
+    // Add Microsoft-specific auth options if provided
+    if (config.auth === 'microsoft' && config.authTitle && config.profilesFolder) {
+      botConfig.authTitle = config.authTitle;
+      botConfig.profilesFolder = config.profilesFolder;
+      botConfig.flow = config.flow || 'msal'; // Required by prismarine-auth >=3.x
+      // userIdentifier must match the name used during account linking
+      if (config.userIdentifier) {
+        botConfig.userIdentifier = config.userIdentifier;
+      }
+      
+      // Check if cache directory exists and has token files
+      try {
+        const fs = require('fs');
+        const exists = fs.existsSync(config.profilesFolder);
+        console.log(`[BotManager] Reconnecting bot with Microsoft auth`);
+        console.log(`[BotManager] - Cache dir: ${config.profilesFolder}`);
+        console.log(`[BotManager] - Flow: ${botConfig.flow}`);
+        console.log(`[BotManager] - UserIdentifier: ${config.userIdentifier || 'not set'}`);
+        console.log(`[BotManager] - Cache directory exists: ${exists}`);
+        
+        if (exists) {
+          const files = fs.readdirSync(config.profilesFolder);
+          console.log(`[BotManager] - Cache directory contents:`, files);
+          const hasCacheFiles = files.some(f => f.includes('_live-cache.json') || f.includes('_msal-cache.json'));
+          console.log(`[BotManager] - Has valid cache files: ${hasCacheFiles}`);
+          
+          if (config.userIdentifier) {
+            const hasMatchingCache = files.some(f => f.startsWith(config.userIdentifier + '_'));
+            console.log(`[BotManager] - Has matching cache for userIdentifier "${config.userIdentifier}": ${hasMatchingCache}`);
+          }
+        }
+      } catch (err) {
+        console.error(`[BotManager] Error checking cache:`, err.message);
+      }
+    }
+
+    console.log(`[BotManager] About to call mineflayer.createBot with config:`, JSON.stringify({ 
+      host: botConfig.host, 
+      port: botConfig.port, 
+      username: botConfig.username, 
+      version: botConfig.version, 
+      auth: botConfig.auth, 
+      flow: botConfig.flow, 
+      authTitle: botConfig.authTitle, 
+      profilesFolder: botConfig.profilesFolder,
+      userIdentifier: botConfig.userIdentifier
+    }));
+    const bot = mineflayer.createBot(botConfig);
+    console.log(`[BotManager] mineflayer.createBot returned successfully for ${botId}`);
+    console.log(`[BotManager] Reconnecting bot ${botId} to ${botConfig.host}:${botConfig.port} as ${botConfig.username}`);
+    bot.loadPlugin(pathfinder);
+    console.log(`[BotManager] Loaded pathfinder plugin for bot ${botId}`);
+
+    // Capture Microsoft device-code prompts printed by prismarine-auth in console
+    try {
+      this._captureMsAuthConsole(botId);
+    } catch (_) {}
 
     // Initialize/merge state preserving id
     const botState = this.botStates.get(botId) || {
@@ -94,22 +168,34 @@ class BotManager {
     botState.host = config.host || botState.host;
 
     this.bots.set(botId, bot);
+    console.log(`[BotManager] Set bot instance in map for ${botId}`);
     this.botStates.set(botId, botState);
+    console.log(`[BotManager] Set bot state in map for ${botId}`);
+    
+    console.log(`[BotManager] About to setup events for bot ${botId}`);
     this.setupBotEvents(botId, bot, botState);
+    console.log(`[BotManager] Setup events completed for bot ${botId}`);
     return { botId, bot, botState };
   }
 
   setupBotEvents(botId, bot, botState) {
+    console.log(`[BotManager.setupBotEvents] Starting event setup for ${botId}`);
+    
     bot.on('login', () => {
       console.log(`✅ [${botId}] Bot logged in as ${bot.username}`);
       botState.connected = true;
       botState.username = bot.username;
       botState.lastUpdate = new Date().toISOString();
     });
+    console.log(`[BotManager.setupBotEvents] Registered 'login' handler for ${botId}`);
 
     bot.on('spawn', () => {
       console.log(`🌍 [${botId}] Bot spawned in the world!`);
       this.updateBotState(botId);
+      // Prepare default movement settings for pathfinder
+      try {
+        bot.defaultMove = new Movements(bot);
+      } catch (_) {}
       
       // Update state every 2 seconds
       const interval = setInterval(() => {
@@ -158,30 +244,34 @@ class BotManager {
 
     bot.on('error', (err) => {
       console.error(`⚠️ [${botId}] Bot error:`, err.message);
+      console.error(`⚠️ [${botId}] Error stack:`, err.stack);
       botState.connected = false;
       botState.lastUpdate = new Date().toISOString();
       emitGuarded('error', { message: err.message });
     });
+    console.log(`[BotManager.setupBotEvents] Registered 'error' handler for ${botId}`);
 
-    bot.on('end', () => {
-      console.log(`🔌 [${botId}] Bot disconnected`);
+    bot.on('end', (reason) => {
+      console.log(`🔚 [${botId}] Bot connection ended${reason ? `: ${reason}` : ''}`);
       botState.connected = false;
       botState.lastUpdate = new Date().toISOString();
-      emitGuarded('disconnect', {});
+      this.eventBus.emit('state', { botId, state: { ...this.botStates.get(botId) }, event: { type: 'end', reason: reason || null, at: new Date().toISOString() } });
     });
+    console.log(`[BotManager.setupBotEvents] Registered 'end' handler for ${botId}`);
 
     // Nearby entity hurt: emit for non-self, throttled per entity to avoid spam
-    botState._eventThrottle = botState._eventThrottle || new Map();
     bot.on('entityHurt', (entity) => {
-      if (!entity || entity === bot.entity) return;
-      const key = entity.id || entity.username || entity.name || 'unknown';
-      const last = botState._eventThrottle.get(key) || 0;
       const now = Date.now();
-      if (now - last < 300) return; // throttle per entity 300ms
-      botState._eventThrottle.set(key, now);
-      const name = entity.username || entity.name || 'entity';
-      this.updateBotState(botId);
-      emitGuarded('entity-hurt', { target: name });
+      botState._eventThrottle = botState._eventThrottle || new Map();
+      const key = entity.id;
+      const lastEmit = botState._eventThrottle.get(key) || 0;
+
+      if (now - lastEmit > 500) { // Throttle to avoid spam
+        botState._eventThrottle.set(key, now);
+        const name = entity.username || entity.name || 'entity';
+        this.updateBotState(botId);
+        emitGuarded('entity-hurt', { target: name });
+      }
     });
 
     // Chat messages
@@ -193,6 +283,70 @@ class BotManager {
       botState.chatMessages.unshift(chatMsg);
       if (botState.chatMessages.length > 50) botState.chatMessages.pop();
       this.eventBus.emit('state', { botId, state: { ...this.botStates.get(botId) }, event: { type: 'chat', message: text, at: chatMsg.at } });
+    });
+    console.log(`[BotManager.setupBotEvents] Registered 'message' handler for ${botId}`);
+    console.log(`[BotManager.setupBotEvents] Completed all event registrations for ${botId}`);
+  }
+
+  // Intercept console output to detect Microsoft device-code prompts and emit an event
+  _captureMsAuthConsole(botId) {
+    const originalLog = console.log;
+    const originalWarn = console.warn;
+    const manager = this;
+    let restored = false;
+    const restore = () => {
+      if (restored) return;
+      restored = true;
+      console.log = originalLog;
+      console.warn = originalWarn;
+    };
+
+    const handler = function(...args) {
+      try {
+        const msg = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+        // Detect typical prismarine-auth device login messages
+        const hasLink = /microsoft\.com\/link/i.test(msg) || /verification_uri/i.test(msg);
+        const codeMatch = msg.match(/\b([A-Z0-9]{8})\b/);
+        if (hasLink && codeMatch) {
+          const code = codeMatch[1];
+          const uriMatch = msg.match(/https?:\/\/[^\s]+/i);
+          const verification_uri = uriMatch ? uriMatch[0] : 'https://www.microsoft.com/link';
+          const payload = { user_code: code, verification_uri, prompt: msg };
+          // Store on state and emit event for UI
+          const state = manager.botStates.get(botId) || {};
+          state.msDevice = payload;
+          manager.botStates.set(botId, state);
+          manager.eventBus.emit('state', { botId, state: { ...state }, event: { type: 'ms-auth', device: payload, at: new Date().toISOString() } });
+        }
+      } catch (_) {}
+      return originalLog.apply(console, args);
+    };
+    const warnHandler = function(...args) {
+      try {
+        const msg = args.map(a => (typeof a === 'string' ? a : JSON.stringify(a))).join(' ');
+        const hasLink = /microsoft\.com\/link/i.test(msg) || /verification_uri/i.test(msg);
+        const codeMatch = msg.match(/\b([A-Z0-9]{8})\b/);
+        if (hasLink && codeMatch) {
+          const code = codeMatch[1];
+          const uriMatch = msg.match(/https?:\/\/[^\s]+/i);
+          const verification_uri = uriMatch ? uriMatch[0] : 'https://www.microsoft.com/link';
+          const payload = { user_code: code, verification_uri, prompt: msg };
+          const state = manager.botStates.get(botId) || {};
+          state.msDevice = payload;
+          manager.botStates.set(botId, state);
+          manager.eventBus.emit('state', { botId, state: { ...state }, event: { type: 'ms-auth', device: payload, at: new Date().toISOString() } });
+        }
+      } catch (_) {}
+      return originalWarn.apply(console, args);
+    };
+
+    console.log = handler;
+    console.warn = warnHandler;
+    // Auto-restore after 60s or on process next tick after login
+    setTimeout(restore, 60000);
+    // Also restore when any bot logs in
+    this.eventBus.once('state', ({ event }) => {
+      if (event && event.type === 'login') restore();
     });
   }
 
@@ -402,6 +556,57 @@ equipArmor(botId, slot) {
       this.taskIntervals.set(botId, first);
       return true;
     }
+    if (taskName === 'FOLLOW NEAREST PLAYER') {
+      if (!bot.pathfinder) {
+        console.warn(`[${botId}] Pathfinder plugin not loaded; cannot start follow task.`);
+        return false;
+      }
+      if (!bot.defaultMove) {
+        try { bot.defaultMove = new Movements(bot); } catch (_) {}
+      }
+      // Track last player found time for idle fallback
+      let lastPlayerFound = Date.now();
+      const runFollow = () => {
+        if (!bot._client || !bot._client.socket) return; // disconnected
+        // Find nearest other player entity
+        let nearest = null;
+        let nearestDist = Infinity;
+        Object.values(bot.players).forEach(p => {
+          const entity = p.entity;
+          if (entity && entity !== bot.entity) {
+            const dist = bot.entity.position.distanceTo(entity.position);
+            if (dist < nearestDist) { nearestDist = dist; nearest = entity; }
+          }
+        });
+        const now = Date.now();
+        if (nearest) {
+          lastPlayerFound = now;
+          const pos = nearest.position;
+          try {
+            bot.pathfinder.setMovements(bot.defaultMove);
+            // GoalNear(x,y,z, range)
+            bot.pathfinder.setGoal(new goals.GoalNear(pos.x, pos.y, pos.z, 1));
+          } catch (err) {
+            console.warn(`[${botId}] Failed to set follow goal:`, err.message);
+          }
+          this.eventBus.emit('state', { botId, state: { ...this.botStates.get(botId) }, event: { type: 'task-progress', name: 'FOLLOW NEAREST PLAYER', target: nearest.username || nearest.name, targetPos: pos, distance: nearestDist.toFixed(2), at: new Date().toISOString() } });
+        } else {
+          // No player found; check if idle fallback needed (10s)
+          if (now - lastPlayerFound > 10000) {
+            // Idle behavior: stop pathfinder, emit idle event
+            try { bot.pathfinder.stop(); } catch (_) {}
+            this.eventBus.emit('state', { botId, state: { ...this.botStates.get(botId) }, event: { type: 'task-idle', name: 'FOLLOW NEAREST PLAYER', reason: 'No players for 10s', at: new Date().toISOString() } });
+          } else {
+            this.eventBus.emit('state', { botId, state: { ...this.botStates.get(botId) }, event: { type: 'task-progress', name: 'FOLLOW NEAREST PLAYER', info: 'No player found', at: new Date().toISOString() } });
+          }
+        }
+        const next = setTimeout(runFollow, 2000);
+        this.taskIntervals.set(botId, next);
+      };
+      const first = setTimeout(runFollow, 500);
+      this.taskIntervals.set(botId, first);
+      return true;
+    }
 
     // For non-premade/custom tasks: placeholder; no-op for now
     return true;
@@ -435,6 +640,71 @@ equipArmor(botId, slot) {
       }).catch(err => {
         const message = err && err.message ? err.message : 'Failed to equip';
         this.eventBus.emit('state', { botId, state: { ...this.botStates.get(botId) }, event: { type: 'equip-error', item: item.displayName || item.name, dest, message, at: new Date().toISOString() } });
+        reject(new Error(message));
+      });
+    });
+  }
+
+  // Consume food item by slot or name
+  async consumeFood(botId, identifier) {
+    const bot = this.bots.get(botId);
+    const state = this.botStates.get(botId);
+    if (!bot || !state) throw new Error('Bot not found');
+    if (!bot.inventory || !bot.inventory.slots) throw new Error('Inventory not ready');
+
+    let item = null;
+    
+    // Find item by slot number or name
+    if (typeof identifier === 'number') {
+      item = bot.inventory.slots.find(i => i && i.slot === identifier);
+    } else if (typeof identifier === 'string') {
+      const target = identifier.toLowerCase();
+      item = bot.inventory.slots.find(i => i && ((i.name || '').toLowerCase() === target || (i.displayName || '').toLowerCase() === target));
+    }
+
+    if (!item) throw new Error('Food item not found');
+
+    const itemName = (item.name || item.displayName || '').toLowerCase();
+    
+    // List of consumable food items in Minecraft
+    const foodItems = [
+      'apple', 'baked_potato', 'beef', 'beetroot', 'beetroot_soup', 'bread', 'carrot',
+      'chicken', 'chorus_fruit', 'cod', 'cooked_beef', 'cooked_chicken', 'cooked_cod',
+      'cooked_mutton', 'cooked_porkchop', 'cooked_rabbit', 'cooked_salmon', 'cookie',
+      'dried_kelp', 'enchanted_golden_apple', 'glow_berries', 'golden_apple', 'golden_carrot',
+      'honey_bottle', 'melon_slice', 'mushroom_stew', 'mutton', 'poisonous_potato', 'porkchop',
+      'potato', 'pumpkin_pie', 'rabbit', 'rabbit_stew', 'rotten_flesh', 'salmon',
+      'spider_eye', 'steak', 'suspicious_stew', 'sweet_berries', 'tropical_fish'
+    ];
+
+    const isFood = foodItems.some(food => itemName.includes(food));
+    if (!isFood) throw new Error('Item is not consumable food');
+
+    console.log(`[BotManager] Bot ${botId} consuming ${item.displayName || item.name} from slot ${item.slot}`);
+
+    return new Promise((resolve, reject) => {
+      // Equip food to hand first
+      bot.equip(item, 'hand').then(() => {
+        // Activate (right-click) to consume
+        bot.activateItem();
+        
+        // Wait for consumption to complete (typically 1.6 seconds for most food)
+        setTimeout(() => {
+          this.updateBotState(botId);
+          this.eventBus.emit('state', { 
+            botId, 
+            state: { ...this.botStates.get(botId) }, 
+            event: { type: 'consume', item: item.displayName || item.name, at: new Date().toISOString() } 
+          });
+          resolve({ success: true, consumed: item.displayName || item.name });
+        }, 2000);
+      }).catch(err => {
+        const message = err && err.message ? err.message : 'Failed to consume food';
+        this.eventBus.emit('state', { 
+          botId, 
+          state: { ...this.botStates.get(botId) }, 
+          event: { type: 'consume-error', item: item.displayName || item.name, message, at: new Date().toISOString() } 
+        });
         reject(new Error(message));
       });
     });
@@ -475,6 +745,11 @@ equipArmor(botId, slot) {
       clearTimeout(existing);
       this.taskIntervals.delete(botId);
     }
+    // Stop pathfinder motion if active
+    const bot = this.bots.get(botId);
+    if (bot && bot.pathfinder) {
+      try { bot.pathfinder.stop(); } catch (_) {}
+    }
     const state = this.botStates.get(botId);
     if (state && state.currentTask) {
       const stopped = state.currentTask.name;
@@ -482,6 +757,33 @@ equipArmor(botId, slot) {
       state.lastUpdate = new Date().toISOString();
       this.eventBus.emit('state', { botId, state: { ...state }, event: { type: 'task-stop', name: stopped, at: new Date().toISOString() } });
     }
+  }
+
+  forceKill(botId) {
+    // Forcefully terminate bot instance and clean all state
+    const bot = this.bots.get(botId);
+    if (bot) {
+      try {
+        // Force end without graceful quit
+        if (bot._client && bot._client.socket) {
+          bot._client.socket.destroy();
+        }
+        bot.end();
+      } catch (err) {
+        console.warn(`[${botId}] Force kill error:`, err.message);
+      }
+      this.bots.delete(botId);
+    }
+    // Clear all intervals/timeouts
+    const interval = this.taskIntervals.get(botId);
+    if (interval) {
+      clearTimeout(interval);
+      this.taskIntervals.delete(botId);
+    }
+    // Clear state
+    this.botStates.delete(botId);
+    console.log(`💀 [${botId}] Force killed and purged all state`);
+    return true;
   }
 
   pauseTask(botId) {

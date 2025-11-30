@@ -1,7 +1,7 @@
 import React from 'react';
 import '../styles/minimap.css';
 
-export default function Minimap({ botPosition, entities, players, size = 360, range = 32 }) {
+export default function Minimap({ botPosition, entities, players, followTarget, size = 360, range = 32 }) {
   // Minimap settings (configurable)
   const mapSize = size; // pixels
   const viewRange = range; // blocks to show in each direction
@@ -29,6 +29,22 @@ export default function Minimap({ botPosition, entities, players, size = 360, ra
     return { x: mapX, y: mapY };
   };
 
+  // Generate curved path for follow target line
+  const generateCurvePath = (targetPos) => {
+    if (!targetPos) return '';
+    const botCenter = { x: mapSize / 2, y: mapSize / 2 };
+    const target = worldToMap(targetPos.x, targetPos.z);
+    // Simple quadratic curve: control point offset perpendicular to line
+    const dx = target.x - botCenter.x;
+    const dy = target.y - botCenter.y;
+    const midX = (botCenter.x + target.x) / 2;
+    const midY = (botCenter.y + target.y) / 2;
+    // Perpendicular offset for curve
+    const offsetX = -dy * 0.15;
+    const offsetY = dx * 0.15;
+    return `M ${botCenter.x},${botCenter.y} Q ${midX + offsetX},${midY + offsetY} ${target.x},${target.y}`;
+  };
+
   // Check if entity is within range
   const isInRange = (entity) => {
     if (!entity.position) return false;
@@ -45,6 +61,38 @@ export default function Minimap({ botPosition, entities, players, size = 360, ra
 
   return (
     <div className="minimap" style={{ width: mapSize, height: mapSize }}>
+        {/* Curved line to follow target */}
+        {followTarget && followTarget.position && (
+          <svg className="minimap-follow-line" style={{ position: 'absolute', top: 0, left: 0, width: mapSize, height: mapSize, pointerEvents: 'none', zIndex: 5 }}>
+            <path
+              d={generateCurvePath(followTarget.position)}
+              stroke="var(--nebula-cyan)"
+              strokeWidth="2"
+              fill="none"
+              strokeDasharray="6 4"
+              opacity="0.7"
+              style={{ filter: 'drop-shadow(0 0 4px var(--nebula-cyan))' }}
+            >
+              <animate
+                attributeName="stroke-dashoffset"
+                from="0"
+                to="20"
+                dur="1s"
+                repeatCount="indefinite"
+              />
+            </path>
+            <circle
+              cx={worldToMap(followTarget.position.x, followTarget.position.z).x}
+              cy={worldToMap(followTarget.position.x, followTarget.position.z).y}
+              r="6"
+              fill="var(--nebula-cyan)"
+              opacity="0.5"
+            >
+              <animate attributeName="r" values="6;10;6" dur="1.5s" repeatCount="indefinite" />
+              <animate attributeName="opacity" values="0.5;0.8;0.5" dur="1.5s" repeatCount="indefinite" />
+            </circle>
+          </svg>
+        )}
         {/* Grid lines */}
         <div className="minimap-grid">
           <div className="grid-line vertical" style={{ left: '25%' }}></div>

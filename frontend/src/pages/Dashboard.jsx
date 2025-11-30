@@ -1,53 +1,29 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useBots } from '../context/BotsContext';
 import { Link } from 'react-router-dom';
 import '../styles/dashboard.css';
+import { getUserStats } from '../utils/api';
 
 export default function Dashboard() {
   const { bots, loading } = useBots();
+  const [stats, setStats] = useState({ activeBots: 0, tasksRunning: 0, totalActions: 0, successRate: 0 });
+  const [recentActivity, setRecentActivity] = useState([]);
 
-  // Mock data for demonstration
-  const stats = [
-    { 
-      label: 'Active Bots', 
-      value: bots.length, 
-      change: '+12%', 
-      trend: 'up',
-      icon: 'fa-robot',
-      color: 'cyan'
-    },
-    { 
-      label: 'Tasks Running', 
-      value: '24', 
-      change: '+5%', 
-      trend: 'up',
-      icon: 'fa-tasks',
-      color: 'purple'
-    },
-    { 
-      label: 'Success Rate', 
-      value: '98.5%', 
-      change: '+2.1%', 
-      trend: 'up',
-      icon: 'fa-chart-line',
-      color: 'green'
-    },
-    { 
-      label: 'Total Actions', 
-      value: '1.2M', 
-      change: '+18%', 
-      trend: 'up',
-      icon: 'fa-bolt',
-      color: 'pink'
-    },
-  ];
-
-  const recentActivity = [
-    { type: 'success', message: 'Bot "FarmMaster" completed mining task', time: '2 min ago', icon: 'fa-check-circle' },
-    { type: 'warning', message: 'Low resource warning on "MiningBot"', time: '5 min ago', icon: 'fa-exclamation-triangle' },
-    { type: 'info', message: 'New bot "BuilderX" deployed successfully', time: '12 min ago', icon: 'fa-robot' },
-    { type: 'success', message: 'Task "Auto-Farm" executed 50 times', time: '20 min ago', icon: 'fa-sync' },
-  ];
+  useEffect(() => {
+    const fetchStats = async () => {
+      try {
+        const raw = localStorage.getItem('minebot_auth');
+        const auth = raw ? JSON.parse(raw) : null;
+        const userId = auth?.user?.id || 1;
+        const data = await getUserStats(userId);
+        setStats(data.totals || { activeBots: 0, tasksRunning: 0, totalActions: 0, successRate: 0 });
+        setRecentActivity(data.recentActivity || []);
+      } catch (e) {
+        console.error('Failed to load dashboard stats:', e);
+      }
+    };
+    fetchStats();
+  }, []);
 
   const quickActions = [
     { label: 'Deploy Bot', icon: 'fa-plus-circle', link: '/app/bots', color: 'purple' },
@@ -80,7 +56,12 @@ export default function Dashboard() {
 
       {/* Stats Grid */}
       <div className="stats-grid">
-        {stats.map((stat, index) => (
+        {[
+          { label: 'Active Bots', value: stats.activeBots, change: '', trend: 'up', icon: 'fa-robot', color: 'cyan' },
+          { label: 'Tasks Running', value: stats.tasksRunning, change: '', trend: 'up', icon: 'fa-tasks', color: 'purple' },
+          { label: 'Success Rate', value: `${stats.successRate}%`, change: '', trend: 'up', icon: 'fa-chart-line', color: 'green' },
+          { label: 'Total Actions', value: stats.totalActions, change: '', trend: 'up', icon: 'fa-bolt', color: 'pink' }
+        ].map((stat, index) => (
           <div key={index} className={`stat-card stat-${stat.color}`}>
             <div className="stat-header">
               <div className={`stat-icon stat-icon-${stat.color}`}>
@@ -181,7 +162,7 @@ export default function Dashboard() {
             {recentActivity.map((activity, index) => (
               <div key={index} className={`activity-item activity-${activity.type}`}>
                 <div className={`activity-icon activity-icon-${activity.type}`}>
-                  <i className={`fas ${activity.icon}`}></i>
+                  <i className={`fas ${activity.success ? 'fa-check-circle' : 'fa-exclamation-triangle'}`}></i>
                 </div>
                 <div className="activity-content">
                   <div className="activity-message">{activity.message}</div>

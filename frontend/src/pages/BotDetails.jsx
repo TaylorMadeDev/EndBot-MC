@@ -38,8 +38,22 @@ const ArmorSlot = ({ state }) => {
 };
 
 // Context menu component for inventory/hotbar actions
-function InventoryContextMenu({ state, onClose, onDrop, onEquip, onUnequip, onInspect }) {
+function InventoryContextMenu({ state, onClose, onDrop, onEquip, onUnequip, onConsume, onInspect }) {
   if (!state.open) return null;
+  
+  // Check if item is food
+  const itemName = (state.item?.name || state.item?.displayName || '').toLowerCase();
+  const foodItems = [
+    'apple', 'baked_potato', 'beef', 'beetroot', 'beetroot_soup', 'bread', 'carrot',
+    'chicken', 'chorus_fruit', 'cod', 'cooked_beef', 'cooked_chicken', 'cooked_cod',
+    'cooked_mutton', 'cooked_porkchop', 'cooked_rabbit', 'cooked_salmon', 'cookie',
+    'dried_kelp', 'enchanted_golden_apple', 'glow_berries', 'golden_apple', 'golden_carrot',
+    'honey_bottle', 'melon_slice', 'mushroom_stew', 'mutton', 'poisonous_potato', 'porkchop',
+    'potato', 'pumpkin_pie', 'rabbit', 'rabbit_stew', 'rotten_flesh', 'salmon',
+    'spider_eye', 'steak', 'suspicious_stew', 'sweet_berries', 'tropical_fish'
+  ];
+  const isFood = foodItems.some(food => itemName.includes(food));
+  
   return (
     <div
       className="inventory-context-menu"
@@ -49,6 +63,12 @@ function InventoryContextMenu({ state, onClose, onDrop, onEquip, onUnequip, onIn
         <i className="fas fa-box"></i>
         <span>{state.item?.displayName || state.item?.name || 'Item'}</span>
       </div>
+      {/* Consume option for food items */}
+      {isFood && (
+        <button className="cm-item" onClick={onConsume}>
+          <i className="fas fa-drumstick-bite"></i> Consume
+        </button>
+      )}
       {/* Equip / Unequip toggle for armor */}
       {(() => {
         const name = (state.item?.name || state.item?.displayName || '').toLowerCase();
@@ -82,12 +102,13 @@ const getItemImageSrc = (item) => {
 
 export default function BotDetails() {
   const { id } = useParams();
-  const { bots, getStatus, chat, disconnect, reconnect, endTask, pauseTask, resumeTask } = useBots();
+  const { bots, getStatus, chat, disconnect, reconnect, killBot, endTask, pauseTask, resumeTask } = useBots();
   const bot = useMemo(() => bots.find(b => String(b.id) === String(id)), [bots, id]);
   const [status, setStatus] = useState({ health: null, position: null, inventory: null });
   const [uiReady, setUiReady] = useState(false);
   const [events, setEvents] = useState([]);
   const [chatMessages, setChatMessages] = useState([]);
+  const [followTarget, setFollowTarget] = useState(null); // { name, position, distance }
   const [msg, setMsg] = useState('');
   const [showTaskModal, setShowTaskModal] = useState(false);
   const [menuState, setMenuState] = useState({ open: false, x: 0, y: 0, item: null, slot: null, area: null });
@@ -128,6 +149,20 @@ export default function BotDetails() {
             if (data.event) {
               if (data.event.type === 'chat') {
                 setChatMessages((prev) => [{ text: data.event.message, at: data.event.at }, ...prev].slice(0, 50));
+              } else if (data.event.type === 'task-progress' && data.event.name === 'FOLLOW NEAREST PLAYER') {
+                // Update follow target for curved line visualization
+                if (data.event.target && data.event.targetPos) {
+                  setFollowTarget({
+                    name: data.event.target,
+                    position: data.event.targetPos,
+                    distance: parseFloat(data.event.distance || 0)
+                  });
+                } else {
+                  setFollowTarget(null);
+                }
+              } else if (data.event.type === 'task-stop' || data.event.type === 'task-idle') {
+                // Clear follow target when task stops or goes idle
+                setFollowTarget(null);
               } else {
                 setEvents((prev) => {
                   const last = prev[0];
@@ -223,6 +258,26 @@ export default function BotDetails() {
       setMenuState({ open: false, x: 0, y: 0, item: null, slot: null, area: null });
     } catch (err) {
       console.error('Unequip failed', err);
+    }
+  };
+
+  // Consume food handler
+  const handleConsume = async () => {
+    try {
+      const { consumeFood, getStatus: fetchStatus } = await import('../utils/api');
+      const slot = menuState.item?.slot;
+      const name = menuState.item?.name || menuState.item?.displayName;
+      const payload = name ? { name } : { slot };
+      await consumeFood(bot.id, payload);
+      // Wait a moment for consumption to complete, then refresh
+      setTimeout(async () => {
+        const fresh = await fetchStatus(bot.id);
+        setStatus(fresh);
+      }, 2500);
+      setMenuState({ open: false, x: 0, y: 0, item: null, slot: null, area: null });
+    } catch (err) {
+      console.error('Consume failed', err);
+      alert(err.message || 'Failed to consume food');
     }
   };
 
@@ -560,6 +615,7 @@ export default function BotDetails() {
                   botPosition={pos} 
                   entities={status?.entities || []} 
                   players={status?.players || []}
+                  followTarget={followTarget}
                   size={420}
                   range={48}
                 />
@@ -617,6 +673,23 @@ export default function BotDetails() {
                   <span>Reconnect</span>
                 </button>
               )}
+              <button
+                className="action-btn action-danger-strong"
+                onClick={async () => {
+                  if (window.confirm(`Force kill ${bot.username}? This will forcefully terminate the bot process and clear all state.`)) {
+                    try {
+                      setUiReady(false);
+                      await killBot(bot.id);
+                      window.location.href = '/app/bots';
+                    } catch (err) {
+                      alert('Failed to kill bot: ' + err.message);
+                    }
+                  }
+                }}
+              >
+                <i className="fas fa-skull"></i>
+                <span>Force Kill</span>
+              </button>
             </div>
           </div>
 
@@ -701,6 +774,7 @@ export default function BotDetails() {
         onDrop={() => { console.log('Dropping item', menuState); setMenuState(s => ({ ...s, open: false })); }}
         onEquip={handleEquip}
         onUnequip={handleUnequip}
+        onConsume={handleConsume}
         onInspect={() => { console.log('Inspecting item', menuState.item); setMenuState(s => ({ ...s, open: false })); }}
       />
     </div>

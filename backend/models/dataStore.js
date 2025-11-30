@@ -1,186 +1,158 @@
-// In-memory data store (replace with database later)
+const db = require('./db');
+
+// Hybrid data store: SQLite for persistence, Maps for quick relations
 class DataStore {
   constructor() {
-    this.users = new Map();
-    this.bots = new Map();
-    this.botsByUser = new Map();
-    this.accounts = new Map();
-    this.accountsByUser = new Map();
-    
-    // Initialize default user
-    this.users.set(1, {
-      id: 1,
-      username: 'admin',
-      email: 'admin@xminebot.com',
-      displayName: 'Admin User',
-      createdAt: new Date().toISOString(),
-      botCount: 0
-    });
-    
-    this.botsByUser.set(1, []);
-    this.accountsByUser.set(1, []);
-
-    // Add a default dummy bot for testing
-    const dummyBotId = 'dummy-1';
-    const dummyBot = {
-      id: dummyBotId,
-      username: 'DummyBot',
-      status: 'online',
-      lastOnline: 'now',
-      serverHost: 'ryasandigzz.aternos.me',
-      serverPort: 25565,
-      version: '1.21.8'
-    };
-    this.createBot(1, dummyBot);
-
-    // Add a test cracked account
-    this.createAccount(1, {
-      id: 'acc-test-1',
-      username: 'TestPlayer',
-      method: 'cracked',
-      status: 'ready'
-    });
+    // No in-memory bootstrap; rely on SQLite persistence
   }
 
   // User methods
   getUser(userId) {
-    return this.users.get(userId);
+    return db.prepare('SELECT id, email, username, created_at as createdAt FROM users WHERE id = ?').get(userId);
   }
 
   getAllUsers() {
-    return Array.from(this.users.values());
+    return db.prepare('SELECT id, email, username, created_at as createdAt FROM users ORDER BY id').all();
   }
 
   createUser(userData) {
-    const userId = this.users.size + 1;
-    const user = {
-      id: userId,
-      ...userData,
-      createdAt: new Date().toISOString(),
-      botCount: 0
-    };
-    this.users.set(userId, user);
-    this.botsByUser.set(userId, []);
-    this.accountsByUser.set(userId, []);
-    return user;
+    const stmt = db.prepare('INSERT INTO users (email, username, password_hash) VALUES (?, ?, ?)');
+    const info = stmt.run(userData.email, userData.username || null, userData.password_hash || '');
+    return this.getUser(info.lastInsertRowid);
   }
 
   updateUser(userId, updates) {
-    const user = this.users.get(userId);
-    if (!user) return null;
-    
-    const updatedUser = { ...user, ...updates };
-    this.users.set(userId, updatedUser);
-    return updatedUser;
+    const fields = [];
+    const values = [];
+    if (updates.email) { fields.push('email = ?'); values.push(updates.email); }
+    if (updates.username) { fields.push('username = ?'); values.push(updates.username); }
+    if (updates.password_hash) { fields.push('password_hash = ?'); values.push(updates.password_hash); }
+    if (!fields.length) return this.getUser(userId);
+    values.push(userId);
+    db.prepare(`UPDATE users SET ${fields.join(', ')} WHERE id = ?`).run(values);
+    return this.getUser(userId);
   }
 
   deleteUser(userId) {
-    const deleted = this.users.delete(userId);
-    if (deleted) {
-      this.botsByUser.delete(userId);
-      this.accountsByUser.delete(userId);
-    }
-    return deleted;
+    const info = db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+    return info.changes > 0;
   }
 
   // Bot methods
   getBot(botId) {
-    return this.bots.get(botId);
+    return db.prepare('SELECT * FROM bots WHERE id = ?').get(botId);
   }
 
   getBotsByUser(userId) {
-    const botIds = this.botsByUser.get(userId) || [];
-    return botIds.map(id => this.bots.get(id)).filter(Boolean);
+    return db.prepare('SELECT * FROM bots WHERE user_id = ? ORDER BY created_at DESC').all(userId);
   }
 
   createBot(userId, botData) {
-    const bot = {
-      ...botData,
-      userId,
-      createdAt: new Date().toISOString()
-    };
-    
-    this.bots.set(botData.id, bot);
-    
-    const userBots = this.botsByUser.get(userId) || [];
-    userBots.push(botData.id);
-    this.botsByUser.set(userId, userBots);
-    
-    // Update user bot count
-    const user = this.users.get(userId);
-    if (user) {
-      user.botCount = userBots.length;
-    }
-    
-    return bot;
+    const stmt = db.prepare(`INSERT INTO bots (id, user_id, account_id, username, server_host, server_port, version, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`);
+    stmt.run(botData.id, userId, botData.accountId || null, botData.username, botData.serverHost || null, botData.serverPort || null, botData.version || null, botData.status || 'offline');
+    return this.getBot(botData.id);
   }
 
   updateBot(botId, updates) {
-    const bot = this.bots.get(botId);
-    if (!bot) return null;
-    
-    const updatedBot = { ...bot, ...updates };
-    this.bots.set(botId, updatedBot);
-    return updatedBot;
+    const fields = [];
+    const values = [];
+    if (updates.username) { fields.push('username = ?'); values.push(updates.username); }
+    if (updates.serverHost) { fields.push('server_host = ?'); values.push(updates.serverHost); }
+    if (updates.serverPort) { fields.push('server_port = ?'); values.push(updates.serverPort); }
+    if (updates.version) { fields.push('version = ?'); values.push(updates.version); }
+    if (updates.status) { fields.push('status = ?'); values.push(updates.status); }
+    if (!fields.length) return this.getBot(botId);
+    values.push(botId);
+    db.prepare(`UPDATE bots SET ${fields.join(', ')} WHERE id = ?`).run(values);
+    return this.getBot(botId);
   }
 
   deleteBot(botId) {
-    const bot = this.bots.get(botId);
-    if (!bot) return false;
-    
-    const userId = bot.userId;
-    const userBots = this.botsByUser.get(userId) || [];
-    const newUserBots = userBots.filter(id => id !== botId);
-    this.botsByUser.set(userId, newUserBots);
-    
-    // Update user bot count
-    const user = this.users.get(userId);
-    if (user) {
-      user.botCount = newUserBots.length;
-    }
-    
-    return this.bots.delete(botId);
+    const info = db.prepare('DELETE FROM bots WHERE id = ?').run(botId);
+    return info.changes > 0;
   }
 
   getAllBots() {
-    return Array.from(this.bots.values());
+    return db.prepare('SELECT * FROM bots ORDER BY created_at DESC').all();
   }
 
   // Account methods
+
+  // Get account by numeric id
   getAccount(accountId) {
-    return this.accounts.get(accountId);
+    return db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId);
   }
 
+  // Get account by unique name for a specific user
+  getAccountByNameForUser(userId, name) {
+    return db.prepare('SELECT * FROM accounts WHERE user_id = ? AND name = ?').get(userId, name);
+  }
+
+
+  // Accounts owned by user
   getAccountsByUser(userId) {
-    const accountIds = this.accountsByUser.get(userId) || [];
-    return accountIds.map(id => this.accounts.get(id)).filter(Boolean);
+    return db.prepare('SELECT * FROM accounts WHERE user_id = ? ORDER BY created_at DESC').all(userId);
+  }
+
+  // Accounts user owns (access is owner-only)
+  getAccountsForUserAccess(userId) {
+    return this.getAccountsByUser(userId);
   }
 
   createAccount(userId, accountData) {
-    const account = {
-      ...accountData,
+    const stmt = db.prepare('INSERT INTO accounts (user_id, name, username, method, status, auth_cache_dir, profile_json, allowed_users) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+    const info = stmt.run(
       userId,
-      createdAt: new Date().toISOString()
-    };
-    this.accounts.set(account.id, account);
-    const userAccounts = this.accountsByUser.get(userId) || [];
-    userAccounts.push(account.id);
-    this.accountsByUser.set(userId, userAccounts);
-    return account;
+      accountData.name,
+      accountData.username,
+      accountData.method,
+      accountData.status || 'ready',
+      accountData.auth_cache_dir || null,
+      accountData.profile_json || null,
+      JSON.stringify(accountData.allowed_users || [])
+    );
+    return this.getAccount(info.lastInsertRowid);
   }
 
   deleteAccount(accountId) {
-    const account = this.accounts.get(accountId);
-    if (!account) return false;
-    const userId = account.userId;
-    const userAccounts = this.accountsByUser.get(userId) || [];
-    const newUserAccounts = userAccounts.filter(id => id !== accountId);
-    this.accountsByUser.set(userId, newUserAccounts);
-    return this.accounts.delete(accountId);
+    const info = db.prepare('DELETE FROM accounts WHERE id = ?').run(accountId);
+    return info.changes > 0;
   }
 
   getAllAccounts() {
-    return Array.from(this.accounts.values());
+    return db.prepare('SELECT * FROM accounts ORDER BY created_at DESC').all();
+  }
+
+  // Activity & Metrics
+  addActivity(userId, { botId = null, type, message, success = 1 }) {
+    if (!type || !message) return null;
+    const stmt = db.prepare('INSERT INTO activities (user_id, bot_id, type, message, success) VALUES (?, ?, ?, ?, ?)');
+    const info = stmt.run(userId, botId || null, type, message, success ? 1 : 0);
+    return db.prepare('SELECT * FROM activities WHERE id = ?').get(info.lastInsertRowid);
+  }
+
+  listRecentActivities(userId, limit = 20) {
+    return db.prepare('SELECT * FROM activities WHERE user_id = ? ORDER BY created_at DESC LIMIT ?').all(userId, limit);
+  }
+
+  ensureMetrics(userId) {
+    const existing = db.prepare('SELECT * FROM user_metrics WHERE user_id = ?').get(userId);
+    if (!existing) {
+      db.prepare('INSERT INTO user_metrics (user_id, total_actions, success_actions) VALUES (?, 0, 0)').run(userId);
+      return db.prepare('SELECT * FROM user_metrics WHERE user_id = ?').get(userId);
+    }
+    return existing;
+  }
+
+  incrementAction(userId, { success = true } = {}) {
+    this.ensureMetrics(userId);
+    db.prepare('UPDATE user_metrics SET total_actions = total_actions + 1, success_actions = success_actions + ? , updated_at = datetime(\'now\') WHERE user_id = ?')
+      .run(success ? 1 : 0, userId);
+    return db.prepare('SELECT * FROM user_metrics WHERE user_id = ?').get(userId);
+  }
+
+  getMetrics(userId) {
+    return this.ensureMetrics(userId);
   }
 }
 

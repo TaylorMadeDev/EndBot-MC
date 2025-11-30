@@ -1,9 +1,21 @@
 {
+  "name": "xminebot-backend",
+  "version": "1.0.0",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node server.js"
+  },
   "dependencies": {
+    "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.5.0",
     "cors": "^2.8.5",
+    "dotenv": "^16.6.1",
     "express": "^5.1.0",
+    "jsonwebtoken": "^9.0.2",
     "mineflayer": "^4.33.0",
-    "mineflayer-pathfinder": "^2.4.5"
+    "mineflayer-pathfinder": "^2.4.5",
+    "prismarine-auth": "^2.7.0",
+    "shodan-client": "^3.2.0"
   }
 }

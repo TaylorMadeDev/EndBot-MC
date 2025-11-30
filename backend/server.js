@@ -1,8 +1,12 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const userRoutes = require('./routes/userRoutes');
 const botRoutes = require('./routes/botRoutes');
 const accountRoutes = require('./routes/accountRoutes');
+const authRoutes = require('./routes/authRoutes');
+const shodanRoutes = require('./routes/shodanRoutes');
+const serverRoutes = require('./routes/serverRoutes');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -18,9 +22,12 @@ app.use((req, res, next) => {
 });
 
 // API Routes
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/bots', botRoutes);
 app.use('/api/accounts', accountRoutes);
+app.use('/api/shodan', shodanRoutes);
+app.use('/api/servers', serverRoutes);
 
 // Health check
 app.get('/api/health', (req, res) => {
@@ -37,6 +44,7 @@ app.get('/', (req, res) => {
     name: 'XMineBot API',
     version: '1.0.0',
     endpoints: {
+      auth: '/api/auth',
       users: '/api/users',
       bots: '/api/bots',
       accounts: '/api/accounts',

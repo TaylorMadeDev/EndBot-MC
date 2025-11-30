@@ -10,6 +10,7 @@
   --star-white: #ffffff;
   --text: #e2e8f0;
   --text-muted: #94a3b8;
+  --border-color: rgba(139, 92, 246, 0.2);
 }
 
 * {

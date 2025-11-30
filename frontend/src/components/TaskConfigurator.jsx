@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useBots } from '../context/BotsContext';
 
-const TASKS = ['AFK', 'Farm', 'Walk', 'Ping Server', 'Mine', 'Chat'];
+const TASKS = ['AFK', 'Follow Nearest Player', 'Farm', 'Walk', 'Ping Server', 'Mine', 'Chat'];
 
 export default function TaskConfigurator() {
   const { bots, assignTask } = useBots();

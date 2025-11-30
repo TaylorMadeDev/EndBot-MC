@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { listBots, createBot as apiCreateBot, getBotStatus, sendBotChat, getUser, listAccounts, createAccount as apiCreateAccount, disconnectBot as apiDisconnectBot, reconnectBot as apiReconnectBot } from '../utils/api';
+import { listBots, createBot as apiCreateBot, getBotStatus, sendBotChat, listAccounts, createAccount as apiCreateAccount, disconnectBot as apiDisconnectBot, reconnectBot as apiReconnectBot, updateBot as apiUpdateBot, deleteBot as apiDeleteBot, killBot as apiKillBot } from '../utils/api';
 import { startBotTask, stopBotTask, pauseBotTask, resumeBotTask } from '../utils/api';
 import { API_BASE } from '../utils/api';
 
@@ -15,13 +15,12 @@ export function BotsProvider({ children }) {
     setLoading(true);
     setError(null);
     try {
-      await getUser(1); // ensure default user exists
-      const data = await listBots(1);
+      const data = await listBots();
       // Handle both array and { bots: [...] } response formats
       const botList = Array.isArray(data) ? data : (data.bots || []);
       setBots(botList);
 
-      const accData = await listAccounts(1);
+      const accData = await listAccounts();
       const accountList = Array.isArray(accData) ? accData : (accData.accounts || []);
       setAccounts(accountList);
     } catch (e) {
@@ -43,8 +42,9 @@ export function BotsProvider({ children }) {
     return () => { mounted = false; };
   }, []);
 
-  const addBot = async ({ username, serverHost, serverPort, version }) => {
-    const response = await apiCreateBot({ username, serverHost, serverPort, version, userId: 1 });
+  const addBot = async ({ accountName, accountId, username, serverHost, serverPort, version }) => {
+    console.log('Adding bot with accountName:', accountName, 'accountId:', accountId, 'username:', username);
+    const response = await apiCreateBot({ accountName, accountId, username, serverHost, serverPort, version });
     // Handle { success: true, botId: '...', bot: {...} } response format
     const bot = response.bot || response;
     setBots((s) => [bot, ...s]);
@@ -82,6 +82,11 @@ export function BotsProvider({ children }) {
     updateBot(id, { status: 'online', id: res.botId });
   };
 
+  const killBot = async (id) => {
+    await apiKillBot(id);
+    updateBot(id, { status: 'offline' });
+  };
+
   const assignTask = async (botId, taskName) => {
     await startBotTask(botId, taskName);
   };
@@ -98,8 +103,19 @@ export function BotsProvider({ children }) {
     await resumeBotTask(botId);
   };
 
+  const editBot = async (botId, updates) => {
+    const bot = await apiUpdateBot(botId, updates);
+    setBots(s => s.map(b => b.id === botId ? { ...b, ...bot } : b));
+    return bot;
+  };
+
+  const removeBot = async (botId) => {
+    await apiDeleteBot(botId);
+    setBots(s => s.filter(b => b.id !== botId));
+  };
+
   return (
-    <BotsContext.Provider value={{ bots, accounts, loading, error, refresh, addBot, addAccount, updateBot, getStatus, chat, disconnect, reconnect, assignTask, endTask, pauseTask, resumeTask }}>
+    <BotsContext.Provider value={{ bots, accounts, loading, error, refresh, addBot, addAccount, updateBot, getStatus, chat, disconnect, reconnect, killBot, assignTask, endTask, pauseTask, resumeTask, editBot, removeBot }}>
       {children}
     </BotsContext.Provider>
   );

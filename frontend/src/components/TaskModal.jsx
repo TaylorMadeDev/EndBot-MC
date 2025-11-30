@@ -10,7 +10,10 @@ export default function TaskModal({ botId, isOpen, onClose }) {
   const [tab, setTab] = useState('premade'); // 'premade' | 'my'
   const [selected, setSelected] = useState(null);
   const [loading, setLoading] = useState(false);
-  const premade = [{ id: 'AFK', name: 'AFK', description: 'Idle safely and prevent disconnects.' }];
+  const premade = [
+    { id: 'AFK', name: 'AFK', description: 'Idle safely and prevent disconnects.' },
+    { id: 'Follow Nearest Player', name: 'Follow Nearest Player', description: 'Continuously pathfind near the closest player.' }
+  ];
 
   if (!isOpen) return null;
 

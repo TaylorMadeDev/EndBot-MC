@@ -28,6 +28,7 @@ backend/node_modules/
 /dist
 frontend/build/
 backend/build/
+backend/auth_cache/
 
 # Logs
 logs/

@@ -12,9 +12,9 @@ export default function Macros() {
   const [blocks, setBlocks] = useState(() => {
     if (editingMacroId) {
       const macro = getMacro(parseInt(editingMacroId));
-      return macro ? macro.blocks : [{ id: 0, x: 400, y: 50, color: 'var(--start-color)', text: '🚩 Start', type: 'start', connectedTo: null }];
+      return macro ? macro.blocks : [{ id: 0, x: 320, y: 50, color: 'var(--start-color)', text: '🚩 Start', type: 'start', connectedTo: null }];
     }
-    return [{ id: 0, x: 400, y: 50, color: 'var(--start-color)', text: '🚩 Start', type: 'start', connectedTo: null }];
+    return [{ id: 0, x: 320, y: 50, color: 'var(--start-color)', text: '🚩 Start', type: 'start', connectedTo: null }];
   });
   
   const [showSaveModal, setShowSaveModal] = useState(false);
@@ -38,30 +38,52 @@ export default function Macros() {
   const dragStateRef = useRef({ offset: { x: 0, y: 0 }, originalPositions: {}, connectedIds: [], isFromPalette: false });
   const containerRef = useRef(null);
   const nextIdRef = useRef(1);
+  const blockRefs = useRef({});
 
   const SNAP_DISTANCE = 30;
   const BLOCK_HEIGHT = 60;
+  const BLOCK_GAP = 20;
   const BLOCK_WIDTH = 220;
 
   const blockLibrary = [
-    { color: '#8b5cf6', text: 'Move', type: 'action', inputs: [{ value: '10' }], suffix: 'steps', category: 'Motion' },
-    { color: '#8b5cf6', text: 'Turn', type: 'action', inputs: [{ type: 'dropdown', value: 'right', options: ['right', 'left'] }, { value: '15' }], suffix: 'degrees', category: 'Motion' },
-    { color: '#06b6d4', text: 'Mine Block', type: 'action', inputs: [{ type: 'dropdown', value: 'stone', options: ['stone','coal_ore','iron_ore','diamond_ore','log'] }], category: 'Minecraft' },
-    { color: '#06b6d4', text: 'Go to XZ', type: 'action', inputs: [{ value: '0' }, { value: '0' }], category: 'Minecraft' },
-    { color: '#06b6d4', text: 'Place Block', type: 'action', inputs: [{ value: 'cobblestone' }], category: 'Minecraft' },
-    { color: '#06b6d4', text: 'Craft Item', type: 'action', inputs: [{ type: 'dropdown', value: 'torch', options: ['torch','planks','stick','pickaxe'] }], category: 'Minecraft' },
-    { color: '#06b6d4', text: 'Attack Target', type: 'action', inputs: [{ type: 'dropdown', value: 'nearest', options: ['nearest','by_name'] }], category: 'Minecraft' },
-    { color: '#06b6d4', text: 'Chat Message', type: 'action', inputs: [{ value: 'Hello!' }], category: 'Minecraft' },
-    { color: '#06b6d4', text: 'Pathfind to XZ', type: 'action', inputs: [{ value: '0' }, { value: '0' }], category: 'Minecraft' },
-    { color: '#06b6d4', text: 'Farm Crop', type: 'action', inputs: [{ type: 'dropdown', value: 'wheat', options: ['wheat','carrot','potato'] }, { value: '5' }], category: 'Minecraft' },
-    { color: '#ec4899', text: 'Wait', type: 'action', inputs: [{ value: '1' }], suffix: 'seconds', category: 'Control' },
-    { color: '#ec4899', text: 'Repeat', type: 'action', inputs: [{ value: '10' }], suffix: 'times', category: 'Control' },
-    { color: '#22c55e', text: 'Set Variable', type: 'action', inputs: [{ value: '0' }], category: 'Variables' },
-    { color: '#22c55e', text: 'Change Variable', type: 'action', inputs: [{ value: '1' }], category: 'Variables' },
+    // Motion (stack)
+    { text: 'Move', type: 'action_move', shape: 'stack', inputs: [{ value: '10' }], suffix: 'steps', category: 'Motion' },
+    { text: 'Turn', type: 'action_turn', shape: 'stack', inputs: [{ type: 'dropdown', value: 'right', options: ['right', 'left'] }, { value: '15' }], suffix: 'degrees', category: 'Motion' },
+    // Minecraft gameplay (stack)
+    { text: 'Mine Block', type: 'mc_mine', shape: 'stack', inputs: [{ type: 'dropdown', value: 'stone', options: ['stone','coal_ore','iron_ore','diamond_ore','log'] }], category: 'Minecraft' },
+    { text: 'Go to XZ', type: 'mc_goto', shape: 'stack', inputs: [{ value: '0' }, { value: '0' }], category: 'Minecraft' },
+    { text: 'Place Block', type: 'mc_place', shape: 'stack', inputs: [{ value: 'cobblestone' }], category: 'Minecraft' },
+    { text: 'Craft Item', type: 'mc_craft', shape: 'stack', inputs: [{ type: 'dropdown', value: 'torch', options: ['torch','planks','stick','pickaxe'] }], category: 'Minecraft' },
+    { text: 'Attack Target', type: 'mc_attack', shape: 'stack', inputs: [{ type: 'dropdown', value: 'nearest', options: ['nearest','by_name'] }], category: 'Minecraft' },
+    { text: 'Chat Message', type: 'mc_chat', shape: 'stack', inputs: [{ value: 'Hello!' }], category: 'Minecraft' },
+    { text: 'Pathfind to XZ', type: 'mc_pathfind', shape: 'stack', inputs: [{ value: '0' }, { value: '0' }], category: 'Minecraft' },
+    { text: 'Farm Crop', type: 'mc_farm', shape: 'stack', inputs: [{ type: 'dropdown', value: 'wheat', options: ['wheat','carrot','potato'] }, { value: '5' }], category: 'Minecraft' },
+    // Control (stack)
+    { text: 'Wait', type: 'ctrl_wait', shape: 'stack', inputs: [{ value: '1' }], suffix: 'seconds', category: 'Control' },
+    { text: 'Repeat', type: 'ctrl_repeat', shape: 'stack', inputs: [{ value: '10' }], suffix: 'times', category: 'Control' },
+    // Variables (stack & reporter)
+    { text: 'Set Variable', type: 'var_set', shape: 'stack', inputs: [{ value: '0' }], category: 'Variables' },
+    { text: 'Change Variable', type: 'var_change', shape: 'stack', inputs: [{ value: '1' }], category: 'Variables' },
+    { text: 'Get Variable', type: 'var_get', shape: 'reporter', inputs: [{ value: 'name' }], category: 'Variables' },
+    // Mineflayer Technical (new category)
+    { text: 'Connect Bot', type: 'mf_connect', shape: 'stack', category: 'Mineflayer' },
+    { text: 'Disconnect Bot', type: 'mf_disconnect', shape: 'cap', category: 'Mineflayer' },
+    { text: 'Equip Item', type: 'mf_equip', shape: 'stack', inputs: [{ value: 'slot' }, { value: 'item' }], category: 'Mineflayer' },
+    { text: 'Unequip Slot', type: 'mf_unequip', shape: 'stack', inputs: [{ value: 'slot' }], category: 'Mineflayer' },
+    { text: 'Look At XYZ', type: 'mf_look', shape: 'stack', inputs: [{ value: '0' }, { value: '0' }, { value: '0' }], category: 'Mineflayer' },
+    { text: 'Send Chat', type: 'mf_chat', shape: 'stack', inputs: [{ value: 'message' }], category: 'Mineflayer' },
+    { text: 'Dig Block XYZ', type: 'mf_dig', shape: 'stack', inputs: [{ value: '0' }, { value: '0' }, { value: '0' }], category: 'Mineflayer' },
+    { text: 'Place At XYZ', type: 'mf_place', shape: 'stack', inputs: [{ value: '0' }, { value: '0' }, { value: '0' }, { value: 'block' }], category: 'Mineflayer' },
+    { text: 'Pathfind XYZ', type: 'mf_path', shape: 'stack', inputs: [{ value: '0' }, { value: '0' }, { value: '0' }], category: 'Mineflayer' },
+    { text: 'Follow Entity', type: 'mf_follow', shape: 'stack', inputs: [{ value: 'name' }], category: 'Mineflayer' },
+    { text: 'Get Position', type: 'mf_get_pos', shape: 'reporter', category: 'Mineflayer' },
+    { text: 'Get Health', type: 'mf_get_health', shape: 'reporter', category: 'Mineflayer' },
+    { text: 'Has Item?', type: 'mf_has_item', shape: 'boolean', inputs: [{ value: 'item' }], category: 'Mineflayer' },
+    { text: 'Entity Nearby?', type: 'mf_entity_near', shape: 'boolean', inputs: [{ value: 'name' }], category: 'Mineflayer' },
   ];
 
   const [selectedCategory, setSelectedCategory] = useState('All');
-  const categories = ['All', 'Motion', 'Minecraft', 'Control', 'Variables'];
+  const categories = ['All', 'Motion', 'Minecraft', 'Control', 'Variables', 'Mineflayer'];
 
   const getConnectedBlocks = useCallback((blockId) => {
     const connected = [];
@@ -133,7 +155,7 @@ export default function Macros() {
     const newY = e.clientY - containerRect.top - dragStateRef.current.offset.y;
 
     const connectedBlockIds = dragStateRef.current.connectedIds;
-    const draggedChainHeight = (connectedBlockIds.length + 1) * BLOCK_HEIGHT;
+    const draggedChainHeight = (connectedBlockIds.length + 1) * (BLOCK_HEIGHT + BLOCK_GAP);
     const originalPositions = dragStateRef.current.originalPositions;
 
     let insertGap = null;
@@ -142,7 +164,7 @@ export default function Macros() {
       if (block.id === dragging || connectedBlockIds.includes(block.id)) continue;
       
       const distanceX = Math.abs(block.x - newX);
-      const distanceY = Math.abs((block.y + BLOCK_HEIGHT) - newY);
+      const distanceY = Math.abs((block.y + BLOCK_HEIGHT + BLOCK_GAP) - newY);
       
       if (distanceX < SNAP_DISTANCE && distanceY < SNAP_DISTANCE) {
         insertGap = { afterBlockId: block.id, height: draggedChainHeight, x: block.x };
@@ -150,7 +172,14 @@ export default function Macros() {
       }
     }
     
-    setPreviewGap(insertGap);
+    if (insertGap) {
+      // Measure current dragged block width for accurate preview width
+      const draggedEl = blockRefs.current[dragging];
+      const measuredWidth = draggedEl ? draggedEl.getBoundingClientRect().width : BLOCK_WIDTH;
+      setPreviewGap({ ...insertGap, width: measuredWidth });
+    } else {
+      setPreviewGap(null);
+    }
 
     setBlocks(prev => {
       const draggedBlock = prev.find(b => b.id === dragging);
@@ -170,7 +199,7 @@ export default function Macros() {
             const originalPos = originalPositions[block.id];
             
             if (originalPos && originalPos.connectedTo === insertGap.afterBlockId) {
-              return { ...block, y: Math.round(targetBlock.y + BLOCK_HEIGHT + insertGap.height) };
+              return { ...block, y: Math.round(targetBlock.y + BLOCK_HEIGHT + BLOCK_GAP + insertGap.height) };
             }
           }
         } else {
@@ -201,7 +230,7 @@ export default function Macros() {
         if (block.id === dragging || connectedBlockIds.includes(block.id)) continue;
 
         const distanceX = Math.abs(block.x - draggedBlock.x);
-        const distanceY = Math.abs((block.y + BLOCK_HEIGHT) - draggedBlock.y);
+        const distanceY = Math.abs((block.y + BLOCK_HEIGHT + BLOCK_GAP) - draggedBlock.y);
 
         if (distanceX < SNAP_DISTANCE && distanceY < SNAP_DISTANCE) {
           snapped = true;
@@ -219,7 +248,7 @@ export default function Macros() {
             return {
               ...block,
               x: Math.round(snapToBlock.x),
-              y: Math.round(snapToBlock.y + BLOCK_HEIGHT),
+              y: Math.round(snapToBlock.y + BLOCK_HEIGHT + BLOCK_GAP),
               connectedTo: snapToBlockId
             };
           } else if (connectedBlockIds.includes(block.id)) {
@@ -227,7 +256,7 @@ export default function Macros() {
             return {
               ...block,
               x: Math.round(snapToBlock.x),
-              y: Math.round(snapToBlock.y + BLOCK_HEIGHT + (draggedBlockIndex + 1) * BLOCK_HEIGHT)
+              y: Math.round(snapToBlock.y + BLOCK_HEIGHT + BLOCK_GAP + (draggedBlockIndex + 1) * (BLOCK_HEIGHT + BLOCK_GAP))
             };
           }
           
@@ -238,7 +267,7 @@ export default function Macros() {
             
             return {
               ...block,
-              y: Math.round(lastInChain.y + BLOCK_HEIGHT),
+              y: Math.round(lastInChain.y + BLOCK_HEIGHT + BLOCK_GAP),
               connectedTo: connectedBlockIds.length > 0 
                 ? connectedBlockIds[connectedBlockIds.length - 1] 
                 : dragging
@@ -320,6 +349,25 @@ export default function Macros() {
     ? blockLibrary 
     : blockLibrary.filter(block => block.category === selectedCategory);
 
+  // Build connection lines (parent -> child)
+  const connectionLines = blocks
+    .filter(b => b.connectedTo !== null)
+    .map(child => {
+      const parent = blocks.find(p => p.id === child.connectedTo);
+      if (!parent) return null;
+      const parentWidth = blockRefs.current[parent.id]?.getBoundingClientRect().width || BLOCK_WIDTH;
+      const childWidth = blockRefs.current[child.id]?.getBoundingClientRect().width || BLOCK_WIDTH;
+      return {
+        id: child.id,
+        category: (child.category || '').toLowerCase(),
+        x1: parent.x + parentWidth / 2,
+        y1: parent.y + BLOCK_HEIGHT,
+        x2: child.x + childWidth / 2,
+        y2: child.y,
+      };
+    })
+    .filter(Boolean);
+
   return (
     <div 
       className="macros-page"
@@ -375,14 +423,13 @@ export default function Macros() {
             {filteredBlocks.map((blockTemplate, index) => (
               <div
                 key={index}
-                className="palette-block"
-                style={{ backgroundColor: blockTemplate.color }}
+                className={`palette-block shape-${blockTemplate.shape || 'stack'} block-${(blockTemplate.category || '').toLowerCase()}`}
                 onMouseDown={(e) => handleMouseDown(e, blockTemplate, true)}
               >
                 <span className="block-text">{blockTemplate.text}</span>
                 {blockTemplate.inputs && blockTemplate.inputs.map((input, idx) => (
                   <React.Fragment key={idx}>
-                    <div className="block-input-preview">
+                    <div className={`block-input-preview ${input.type !== 'dropdown' && /^\d{1,3}$/.test(String(input.value)) ? 'small-num' : ''}`}>
                       {input.type === 'dropdown' ? input.value : input.value}
                     </div>
                   </React.Fragment>
@@ -402,23 +449,38 @@ export default function Macros() {
               className="preview-gap"
               style={{
                 left: `${blocks.find(b => b.id === previewGap.afterBlockId)?.x}px`,
-                top: `${blocks.find(b => b.id === previewGap.afterBlockId)?.y + BLOCK_HEIGHT}px`,
+                top: `${blocks.find(b => b.id === previewGap.afterBlockId)?.y + BLOCK_HEIGHT + BLOCK_GAP}px`,
                 height: `${previewGap.height}px`,
-                width: `${BLOCK_WIDTH}px`,
+                width: `${previewGap.width || BLOCK_WIDTH}px`,
               }}
             />
           )}
 
+          {/* Connection dotted lines */}
+          <svg className="connection-lines" width="100%" height="100%">
+            {connectionLines.map(line => (
+              <line
+                key={line.id}
+                x1={line.x1}
+                y1={line.y1}
+                x2={line.x2}
+                y2={line.y2}
+                className={`connection-line category-${line.category}`}
+              />
+            ))}
+          </svg>
+
           {blocks.map(block => (
             <div
               key={block.id}
-              className={`canvas-block ${block.type === 'start' ? 'start-block' : ''} ${dragging === block.id ? 'dragging' : ''}`}
+              className={`canvas-block ${block.type === 'start' ? 'start-block shape-hat block-start' : `shape-${block.shape || 'stack'} block-${(block.category || '').toLowerCase()}`} ${dragging === block.id ? 'dragging' : ''}`}
               style={{
                 left: `${block.x}px`,
                 top: `${block.y}px`,
-                backgroundColor: block.color,
-                width: `${BLOCK_WIDTH}px`,
+                minWidth: `${BLOCK_WIDTH}px`,
+                width: 'max-content',
               }}
+              ref={el => { if (el) blockRefs.current[block.id] = el; }}
               onMouseDown={(e) => handleMouseDown(e, block, false)}
             >
               {block.connectedTo === null && block.type !== 'start' && (
@@ -450,7 +512,7 @@ export default function Macros() {
                     ) : (
                       <input
                         type="text"
-                        className="block-input"
+                        className={`block-input ${/^\d{1,3}$/.test(String(input.value)) ? 'small-num' : ''}`}
                         value={input.value}
                         onChange={(e) => handleInputChange(block.id, index, e.target.value)}
                         onClick={(e) => e.stopPropagation()}
@@ -462,7 +524,7 @@ export default function Macros() {
                 {block.suffix && <span className="block-suffix">{block.suffix}</span>}
               </div>
               
-              {block.connectedTo !== null && (
+              {block.connectedTo !== null && block.shape !== 'reporter' && block.shape !== 'boolean' && (
                 <div className="block-connector">
                   <i className="fas fa-arrow-up"></i>
                 </div>

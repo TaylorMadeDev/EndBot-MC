@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../context/AuthContext';
 import '../styles/login.css';
 
 export default function Register() {
@@ -16,6 +17,7 @@ export default function Register() {
   const [success, setSuccess] = useState('');
   const [agreedToTerms, setAgreedToTerms] = useState(false);
   const navigate = useNavigate();
+  const { register } = useAuth();
   const starsRef = useRef(null);
   const shapesRef = useRef(null);
   const particlesRef = useRef(null);
@@ -163,15 +165,20 @@ export default function Register() {
 
     setLoading(true);
     try {
-      // Simulate API call
-      await new Promise(resolve => setTimeout(resolve, 2000));
-      
-      setSuccess('Account created successfully! Redirecting to login...');
-      setTimeout(() => {
-        navigate('/login');
-      }, 2000);
+      const res = await register(formData.email, formData.username, formData.password);
+      if (res && res.token) {
+        setSuccess('Account created! Redirecting to dashboard...');
+        setTimeout(() => {
+          navigate('/app/dashboard');
+        }, 1200);
+      } else {
+        setSuccess('Account created! Please login.');
+        setTimeout(() => {
+          navigate('/login');
+        }, 1200);
+      }
     } catch (err) {
-      setErrors({ general: 'Registration failed. Please try again.' });
+      setErrors({ general: err?.message || 'Registration failed. Please try again.' });
     } finally {
       setLoading(false);
     }

@@ -8,6 +8,7 @@ import BotDetails from './pages/BotDetails';
 import Tasks from './pages/Tasks';
 import Marketplace from './pages/Marketplace';
 import Macros from './pages/Macros';
+import Pentester from './pages/Pentester';
 import Settings from './pages/Settings';
 import Login from './pages/Login';
 import Register from './pages/Register';
@@ -46,7 +47,7 @@ export default function App() {
         <Route path="macros" element={<Macros />} />
         <Route path="scheduler" element={<NotFound />} />
         <Route path="analytics" element={<NotFound />} />
-        <Route path="pentest" element={<NotFound />} />
+        <Route path="pentest" element={<Pentester />} />
         <Route path="settings" element={<Settings />} />
         <Route path="help" element={<NotFound />} />
         <Route path="profile" element={<NotFound />} />
